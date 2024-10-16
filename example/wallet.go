@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"encoding/json"
+	"os"
 
 	"github.com/TBD54566975/ssi-sdk/crypto"
 	"github.com/TBD54566975/ssi-sdk/did"
@@ -17,14 +19,14 @@ import (
 // This would NOT be how it would be stored in production, but serves for demonstrative purposes
 // This holds the assigned DIDs, their associated private keys, and VCs
 type SimpleWallet struct {
-	vcs  map[string]string
-	dids map[string][]WalletKeys
-	mux  *sync.Mutex
+	vcs  map[string]string	`json:"vcs"`
+	dids map[string][]WalletKeys	`json:"dids"`
+	mux  *sync.Mutex	`json:"-"`
 }
 
 type WalletKeys struct {
-	ID  string
-	Key gocrypto.PrivateKey
+	ID  string	`json:"id"`
+	Key gocrypto.PrivateKey	`json:"key"`
 }
 
 func NewSimpleWallet() *SimpleWallet {
@@ -34,6 +36,28 @@ func NewSimpleWallet() *SimpleWallet {
 		dids: make(map[string][]WalletKeys),
 	}
 }
+
+func LoadSimpleWallet() (*SimpleWallet, error) {
+	file, err := os.Open("wallet.json")
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return nil, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	var wallet SimpleWallet
+	if err := decoder.Decode(&wallet); err != nil {
+		fmt.Println("Error decoding wallet:", err)
+		return nil, err
+	}
+
+	fmt.Println("Wallet loaded from file wallet.json")
+
+	return &wallet, nil
+}
+
+
 
 func (s *SimpleWallet) AddDID(id string) error {
 	s.mux.Lock()
@@ -167,4 +191,72 @@ func (s *SimpleWallet) Init(didMethod did.Method) error {
 
 func (s *SimpleWallet) Size() int {
 	return len(s.vcs)
+}
+
+func (s *SimpleWallet) MarshalJSON() ([]byte, error) {
+	type Alias SimpleWallet
+
+	return json.Marshal(&struct {
+		Vcs map[string]string `json:"vcs"`
+		Dids map[string][]WalletKeys `json:"dids"`
+		*Alias
+	}{
+		Vcs: s.vcs,
+		Dids: s.dids,
+		Alias: (*Alias)(s),
+	})
+}
+
+func (s *SimpleWallet) UnmarshalJSON(data []byte) error {
+	// Create a temporary struct to match the JSON structure
+	type Alias SimpleWallet
+
+	temp := &struct {
+		Vcs  map[string]string     `json:"vcs"`
+		Dids map[string][]WalletKeys `json:"dids"`
+		*Alias
+	}{
+		Alias: (*Alias)(s),
+	}
+
+	// Unmarshal into the temporary struct
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return err
+	}
+
+	// Manually set the private fields from the temporary struct
+	s.vcs = temp.Vcs
+	s.dids = temp.Dids
+	return nil
+}
+
+// create function to save the wallet to a file
+func (s *SimpleWallet) SaveToFile() error {
+
+	//print dids and keys
+	fmt.Println("DIDs and Keys in wallet:")
+	for did, keys := range s.dids {
+		fmt.Println("DID:", did)
+		for _, key := range keys {
+			fmt.Println("Key ID:", key.ID)
+		}
+	}
+	
+	// Open a file for writing
+	file, err := os.Create("wallet.json")
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return err
+	}
+	defer file.Close()
+	
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(s); err != nil {
+		fmt.Println("Error encoding wallet:", err)
+		return err
+	}
+
+	fmt.Println("Wallet saved to file wallet.json")
+
+	return nil
 }

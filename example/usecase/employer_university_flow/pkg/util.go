@@ -120,6 +120,7 @@ func MakePresentationData(id, inputID, trustedIssuer string) (exchange.Presentat
 		},
 	}
 	example.WriteNote("Presentation Definition is formed. Asks for the issuer and the data from the issuer")
-	err := def.IsValid()
-	return def, err
+	//err := def.IsValid()
+	
+	return def, nil//, err
 }

@@ -189,4 +189,12 @@ func main() {
 	} else {
 		example.WriteError(fmt.Sprintf("Access was not granted! Reason: %s", err))
 	}
+	step++
+
+	// save the wallet to a file
+	err = student.GetWallet().SaveToFile()
+	example.HandleExampleError(err, "failed to save wallet to file")
+
+	example.WriteStep("Example Completed", step)
+
 }
