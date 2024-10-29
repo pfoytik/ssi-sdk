@@ -106,6 +106,17 @@ func main() {
 	studentKID := studentKeys[0].ID
 	example.HandleExampleError(err, "failed to get student key")
 
+//	example.WriteStep("Initializing Stranger", step)
+//	step++
+
+//	stranger, err := emp.NewEntity("Stranger", did.KeyMethod)
+//	example.HandleExampleError(err, "failed to create stranger")
+//	strangerDID := stranger.GetWallet().GetDIDs()[0]
+//	strangerKeys, err := stranger.GetWallet().GetKeysForDID(strangerDID)
+//	strangerKey := strangerKeys[0].Key
+//	strangerKID := strangerKeys[0].ID
+//	example.HandleExampleError(err, "failed to get stranger key")
+	
 	example.WriteStep("Initializing Employer", step)
 	step++
 
@@ -130,12 +141,27 @@ func main() {
 
 	example.WriteNote(fmt.Sprintf("Initialized University (Verifier) DID: %s and registered it", universityDID))
 
+	example.WriteStep("Initializing Fake University", step)
+	step++
+
+	fakeUniversity, err := emp.NewEntity("FakeUniversity", did.PeerMethod)
+	example.HandleExampleError(err, "failed to create fake university")
+	fakeUniversityDID := fakeUniversity.GetWallet().GetDIDs()[0]
+	fakeUniversityKeys, err := fakeUniversity.GetWallet().GetKeysForDID(fakeUniversityDID)
+	fakeUniversityKey := fakeUniversityKeys[0].Key
+	fakeUniversityKID := fakeUniversityKeys[0].ID
+	example.HandleExampleError(err, "failed to get fake university key")
+
+	example.WriteNote(fmt.Sprintf("Initialized Fake University (Verifier) DID: %s and registered it", fakeUniversityDID))
+	example.WriteNote(fmt.Sprintf("University (Issuer) DID: %s and FakeUniversity (Issuer) DID: %s", universityDID, fakeUniversityDID))
+	example.WriteNote(fmt.Sprintf("FakeUniversity KEY %s and University KEY %s are in cahoots", fakeUniversityKey, universityKey))
+
 	example.WriteStep("Example University Creates VC for Holder", step)
 	step++
 
 	universitySigner, err := jwx.NewJWXSigner(universityDID, &universityKID, universityKey)
 	example.HandleExampleError(err, "failed to build university signer")
-	vcID, vc, err := emp.BuildExampleUniversityVC(*universitySigner, universityDID, studentDID)
+	vcID, vc, err := emp.BuildExampleUniversityVC(*universitySigner, universityDID, studentDID, "http://example.edu/credentials/18720")
 	example.HandleExampleError(err, "failed to build vc")
 
 	example.WriteStep("Example University Sends VC to Student (Holder)", step)
@@ -145,6 +171,25 @@ func main() {
 	example.HandleExampleError(err, "failed to add credentials to wallet")
 
 	msg := fmt.Sprintf("VC is stored in wallet. Wallet size is now: %d", student.GetWallet().Size())
+	example.WriteNote(msg)
+
+	example.WriteStep("Fake University Creates Fake VC for Holder using UniversityDID", step)
+	step++
+
+	fakeUniversitySigner, err := jwx.NewJWXSigner(fakeUniversityDID, &fakeUniversityKID, fakeUniversityKey)
+	example.HandleExampleError(err, "failed to build fake university signer")
+	fakeVCID, fakeVC, err := emp.BuildExampleUniversityVC(*fakeUniversitySigner, fakeUniversityDID, studentDID, "http://example.edu/credentials/18721")
+	example.HandleExampleError(err, "failed to build fake vc")
+
+	example.WriteStep("Fake University Sends Fake VC to Student (Holder)", step)
+	step++
+
+	example.WriteNote(fmt.Sprintf("University VCID %s and FakeUniversity VCID %s", vcID, fakeVCID))
+
+	err = student.GetWallet().AddCredentialJWT(fakeVCID, fakeVC)
+	example.HandleExampleError(err, "failed to add fake credentials to wallet")
+
+	msg = fmt.Sprintf("Fake VC is stored in wallet. Wallet size is now: %d", student.GetWallet().Size())
 	example.WriteNote(msg)
 
 	example.WriteNote(fmt.Sprintf("initialized Employer (Verifier) DID: %v", employerDID))
@@ -160,6 +205,8 @@ func main() {
 
 	presentationRequestJWT, employerSigner, err := emp.MakePresentationRequest(employerKey, employerKID, presentationData, employerDID, studentDID)
 	example.HandleExampleError(err, "failed to make presentation request")
+
+	example.WriteNote(fmt.Sprintf("Presentation Request JWT: %s", string(presentationRequestJWT)))
 
 	studentSigner, err := jwx.NewJWXSigner(studentDID, &studentKID, studentKey)
 	example.HandleExampleError(err, "failed to build json web key signer")
@@ -178,13 +225,51 @@ func main() {
 	example.HandleExampleError(err, "failed to create DID r")
 	_, _, vp, err := integrity.VerifyVerifiablePresentationJWT(context.Background(), *verifier, r, string(submission))
 	example.HandleExampleError(err, "failed to verify jwt")
-
+	
 	dat, err = json.Marshal(vp)
 	example.HandleExampleError(err, "failed to marshal submission")
 	logrus.Debugf("Submission:\n%v", string(dat))
 
 	example.WriteStep(fmt.Sprintf("Employer Attempting to Grant Access"), step)
 	if err = emp.ValidateAccess(*verifier, r, submission); err == nil {
+		example.WriteOK("Access Granted!")
+	} else {
+		example.WriteError(fmt.Sprintf("Access was not granted! Reason: %s", err))
+	}
+	step++
+
+	example.WriteStep(fmt.Sprintf("Student creates fake VC"), step)
+	example.WriteNote(fmt.Sprintf("Student sends fake VC to Employer %s", employerDID))
+	example.WriteNote(fmt.Sprintf("Student %s and fake university %s are in cahoots", studentDID, fakeUniversityDID))
+	example.WriteNote(fmt.Sprintf("Student KEY %s and fake university KEY %s are in cahoots", studentKey, fakeUniversityKey))
+	example.WriteNote(fmt.Sprintf("Student KID %s and fake university KID %s are in cahoots", studentKID, fakeUniversityKID))
+	step++
+
+	example.WriteNote(fmt.Sprintf("Student returns claims via a Presentation Submission %s", fakeVC))
+
+	example.WriteNote(fmt.Sprintf("Employer wants %s", string(presentationRequestJWT)))
+	//employerVerifier, err := employerSigner.ToVerifier(studentDID)
+	//example.HandleExampleError(err, "failed to build employer verifier")
+	fake_submission, err := emp.BuildPresentationSubmission(string(presentationRequestJWT), *employerVerifier, *studentSigner, fakeVC)
+	example.HandleExampleError(err, "failed to build presentation submission")
+
+	//verifier, err := studentSigner.ToVerifier(employerDID)
+	//example.HandleExampleError(err, "failed to construct verifier")
+
+	example.WriteNote(fmt.Sprintf("Fake presentation is created %s vs %s", string(fake_submission), string(submission)))
+
+	//r, err = resolution.NewResolver([]resolution.Resolver{key.Resolver{}, peer.Resolver{}}...)
+	example.HandleExampleError(err, "failed to create DID r")
+	_, _, fake_vp, err := integrity.VerifyVerifiablePresentationJWT(context.Background(), *verifier, r, string(fake_submission))
+	example.HandleExampleError(err, "failed to verify jwt")
+	
+
+	dat, err = json.Marshal(fake_vp)
+	example.HandleExampleError(err, "failed to marshal submission")
+	logrus.Debugf("Submission:\n%v", string(dat))
+
+	example.WriteStep(fmt.Sprintf("Employer Attempting to Grant Access with Fake VC"), step)
+	if err = emp.ValidateAccess(*verifier, r, fake_submission); err == nil {
 		example.WriteOK("Access Granted!")
 	} else {
 		example.WriteError(fmt.Sprintf("Access was not granted! Reason: %s", err))

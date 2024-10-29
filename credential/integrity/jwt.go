@@ -327,6 +327,7 @@ func VerifyVerifiablePresentationJWT(ctx context.Context, verifier jwx.Verifier,
 	// verify signature for each credential in the vp
 	for i, cred := range vp.VerifiableCredential {
 		// verify the signature on the credential
+		fmt.Println("Verifying credential signature ", cred)
 		verified, err := VerifyCredentialSignature(ctx, cred, r)
 		if err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "verifying credential %d", i)
